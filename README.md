@@ -1,146 +1,273 @@
-# C147/247 Final Project
-### Winter 2026 
+# EMG-to-QWERTY Decoding with BiLSTM and Data Augmentation
 
-This course project is built upon the emg2qwerty work from Meta. The first section of this README provides some guidance for working with the repo and contains a running list of FAQs. **Note that the rest of the README is from the original repo and we encourage you to take a look at their work.**
+UCLA ECE C247 Final Project – Winter 2026  
 
-## Guiding Tips + FAQs
-_Last updated 2/13/2025_
-- Read through the Project Guidelines to ensure that you have a clear understanding of what we expect
-- Familiarize yourself with the prediction task and get a high-level understanding of their base architecture (it would be beneficial to read about CTC loss)
-- Get comfortable with the codebase
-  - ```lightning.py``` + ```modules.py``` - where most of your model architecture development will take place
-  - ```data.py``` - defines PyTorch dataset (likely will not need to touch this much)
-  - ```transforms.py``` - implement more data transforms and other preprocessing techniques
-  - ```config/*.yaml``` - modify model hyperparameters and PyTorch Lightning training configuration
-    - **Q: How do we update these configuration files?** A: Note the structure of YAML files include basic key-value pairs (i.e. ```<key>: <value>```) and hierarchical structure. So, for instance, if we wanted to update the ```mlp_features``` hyperparameter of the ```TDSConvCTCModule```, we would change the value at line 5 of ```config/model/tds_conv_ctc.yaml``` (under ```module```). _Read more details [here](https://pytorch-lightning.readthedocs.io/en/1.3.8/common/lightning_cli.html)._
-    - **Q: Where do we configure data splitting?** A: Refer to ```config/user/single_user.yaml```. Be careful with your edits, so that you don't accidentally move the test data into your training set.
 
-# emg2qwerty
-[ [`Paper`](https://arxiv.org/abs/2410.20081) ] [ [`Dataset`](https://fb-ctrl-oss.s3.amazonaws.com/emg2qwerty/emg2qwerty-data-2021-08.tar.gz) ] [ [`Blog`](https://ai.meta.com/blog/open-sourcing-surface-electromyography-datasets-neurips-2024/) ] [ [`BibTeX`](#citing-emg2qwerty) ]
+---
 
-A dataset of surface electromyography (sEMG) recordings while touch typing on a QWERTY keyboard with ground-truth, benchmarks and baselines.
+# 1. Project Overview
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/71a9f361-7685-4188-83c3-099a009b6b81" height="80%" width="80%" alt="alt="sEMG recording" >
-</p>
+This project investigates the problem of decoding typed characters directly from surface electromyography (sEMG) signals recorded from the wrist. The task is based on the **EMG2QWERTY dataset released by Meta Reality Labs**, which contains synchronized EMG signals and ground-truth keystrokes during touch typing.
 
-## Setup
+We explore several neural network architectures and data processing techniques to improve decoding performance, including:
+
+- BiLSTM
+- GRU
+- Transformer
+- Data augmentation techniques
+- Temporal downsampling
+- Beam search decoding
+
+Our final system uses a **BiLSTM-CTC model with data processing techniques and beam search decoding**, achieving a **test CER of 7.74%** on the single-user dataset (#89335547).
+
+Pipeline of the system:
+EMG Signal → Spectrogram → Neural Network → CTC Loss → Beam Search Decoder → Text Output
+
+
+---
+
+# 2. Setup
+
+## Clone the repository
+```shell
+git clone https://github.com/kexin0712/emg2qwerty-project.git
+
+cd emg2qwerty-project
+```
+---
+
+## Install environment
+
+Create the conda environment using the provided configuration:
 
 ```shell
-# Install [git-lfs](https://git-lfs.github.com/) (for pretrained checkpoints)
-git lfs install
-
-# Clone the repo, setup environment, and install local package
-git clone git@github.com:joe-lin-tech/emg2qwerty.git ~/emg2qwerty 
-cd ~/emg2qwerty
 conda env create -f environment.yml
 conda activate emg2qwerty
 pip install -e .
+```
+Alternatively, install dependencies with pip:
+```shell
+pip install -r requirements.txt
+pip install -e .
+```
 
-# Download the dataset, extract, and symlink to ~/emg2qwerty/data
+---
+
+## Download the dataset, extract, and symlink to ~/emg2qwerty/data
+
+```shell
+#Download the EMG2QWERTY dataset:
 cd ~ && wget https://fb-ctrl-oss.s3.amazonaws.com/emg2qwerty/emg2qwerty-data-2021-08.tar.gz
 tar -xvzf emg2qwerty-data-2021-08.tar.gz
-ln -s ~/emg2qwerty-data-2021-08 ~/emg2qwerty/data
+
+#Then link the dataset to the project directory:
+ln -s ~/emg2qwerty-data-2021-08 ./data
 ```
 
-## Data
+---
 
-The dataset consists of 1,136 files in total - 1,135 session files spanning 108 users and 346 hours of recording, and one `metadata.csv` file. Each session file is in a simple HDF5 format and includes the left and right sEMG signal data, prompted text, keylogger ground-truth, and their corresponding timestamps. `emg2qwerty.data.EMGSessionData` offers a programmatic read-only interface into the HDF5 session files.
+# 3. Training
 
-To load the `metadata.csv` file and print dataset statistics,
+All training commands are executed through the `emg2qwerty.train` module.
+
+## Baseline (TDSConv)
+```shell
+python -m emg2qwerty.train\
+    user=single_user\
+    model=tds_conv_ctc\
+    trainer.accelerator=gpu trainer.devices=1
+```
+
+---
+
+## BiLSTM
+```shell
+python -m emg2qwerty.train\
+    user=single_user\
+    model=bilstm_ctc\
+    trainer.accelerator=gpu trainer.devices=1
+```
+---
+
+## BiLSTM + TDSConv
+```shell
+python -m emg2qwerty.train\
+    user=single_user\
+    model=bilstm_tdsconv_ctc\
+    trainer.accelerator=gpu trainer.devices=1
+```
+
+---
+
+## GRU
 
 ```shell
-python scripts/print_dataset_stats.py
+python -m emg2qwerty.train\
+    user=single_user\
+    model=gru_ctc\
+    trainer.accelerator=gpu trainer.devices=1\
 ```
 
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/172884/131012947-66cab4c4-963c-4f1a-af12-47fea1681f09.png" alt="Dataset statistics" height="50%" width="50%">
-</p>
+---
 
-To re-generate data splits,
+## Transformer
 
 ```shell
-python scripts/generate_splits.py
+python -m emg2qwerty.train\
+    user=single_user\
+    model=transformer_ctc\
+    trainer.accelerator=gpu trainer.devices=1\
+```
+---
+
+## Best Model：Fine-Tuned BiLSTM
+```shell
+python -m emg2qwerty.train\
+    user=single_user\
+    model=bilstm_ctc\
+    trainer.accelerator=gpu\
+    trainer.devices=1\ 
+    trainer.max_epochs=40\
+    optimizer.lr=2.5e-4\
+    module.lstm_hidden_size=448\
+    module.output_dropout=0.25 module.lstm_dropout=0.15\
+    +trainer.gradient_clip_val=1.0
 ```
 
-The following figure visualizes the dataset splits for training, validation and testing of generic and personalized user models. Refer to the paper for details of the benchmark setup and data splits.
+---
 
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/172884/131012465-504eccbf-8eac-4432-b8aa-0e453ad85b49.png" alt="Data splits">
-</p>
+# 4. BiLSTM model Training with different Data Processing Techniques 
 
-To re-format data in [EEG BIDS format](https://bids-specification.readthedocs.io/en/stable/04-modality-specific-files/03-electroencephalography.html),
+Add the following commands after the command used for the Best Model (Fine-Tuned BiLSTM) to apply the corresbonding data processing technique.
+
+---
+## Weakened SpecAugment + Gaussian Noise 
+```shell
+    transforms.specaug.n_time_masks=2 \
+    transforms.specaug.time_mask_param=15 \
+    transforms.specaug.n_freq_masks=1 \
+    transforms.specaug.freq_mask_param=3 \
+    transforms.train.1='${gaussian_noise}'
+```
+
+---
+## Magnitude Warping 
+```shell
+    transforms.train.4='${magnitude_warp}'
+```
+
+---
+## Temporal Attenuation
+```shell
+    transforms.train.1='${temporal_attenuation}'
+```
+---
+
+---
+## Weakened SpecAugment + Gaussian Noise + Magnitude Warping
+```shell
+    transforms.specaug.n_time_masks=2 \
+    transforms.specaug.time_mask_param=15 \
+    transforms.specaug.n_freq_masks=1 \
+    transforms.specaug.freq_mask_param=3 \
+    transforms.train="[${to_tensor},${gaussian_noise},${select_channels},${band_rotation},${temporal_jitter},${magnitude_warping},${downsample},${logspec},${specaug}]"
+```
+---
+
+---
+## Weakened SpecAugment + Gaussian Noise + Temporal Attenuation
+```shell
+    transforms.specaug.n_time_masks=2 \
+    transforms.specaug.time_mask_param=15 \
+    transforms.specaug.n_freq_masks=1 \
+    transforms.specaug.freq_mask_param=3 \
+    transforms.train="[${to_tensor},${temporal_attenuation},${gaussian_noise},${select_channels},${band_rotation},${temporal_jitter},${downsample},${logspec},${specaug}]"
+```
+---
+
+---
+## Ablation Experiments on Sampling Rate
+
+Modify the downsampling factor to control the sampling rate:
+Example values: 1, 2, 3，4, 6.
 
 ```shell
-python scripts/convert_to_bids.py
+    transforms.downsample.factor = <factor>
 ```
+---
 
-## Training
+# 5. Testing
 
-Generic user model:
+After training, models can be evaluated using greedy decoding or beam search decoding.
 
-```shell
-python -m emg2qwerty.train \
-  user=generic \
-  trainer.accelerator=gpu trainer.devices=8 \
-  --multirun
-```
+---
 
-Personalized user models:
+## Greedy Decoding
 
-```shell
-python -m emg2qwerty.train \
-  user="single_user" \
-  trainer.accelerator=gpu trainer.devices=1
-```
 
-If you are using a Slurm cluster, include "cluster=slurm" override in the argument list of above commands to pick up `config/cluster/slurm.yaml`. This overrides the Hydra Launcher to use [Submitit plugin](https://hydra.cc/docs/plugins/submitit_launcher). Refer to Hydra documentation for the list of available launcher plugins if you are not using a Slurm cluster.
+python -m emg2qwerty.train\
+user=single_user\
+model=bilstm_ctc \
+checkpoint=<path_to_checkpoint>\
+train=False\
+decoder=ctc_greedy
 
-## Testing
 
-Greedy decoding:
+---
 
-```shell
-python -m emg2qwerty.train \
-  user="glob(user*)" \
-  checkpoint="${HOME}/emg2qwerty/models/personalized-finetuned/\${user}.ckpt" \
-  train=False trainer.accelerator=cpu \
-  decoder=ctc_greedy \
-  hydra.launcher.mem_gb=64 \
-  --multirun
-```
+## Beam Search Decoding
 
-Beam-search decoding with 6-gram character-level language model:
 
-```shell
-python -m emg2qwerty.train \
-  user="glob(user*)" \
-  checkpoint="${HOME}/emg2qwerty/models/personalized-finetuned/\${user}.ckpt" \
-  train=False trainer.accelerator=cpu \
-  decoder=ctc_beam \
-  hydra.launcher.mem_gb=64 \
-  --multirun
-```
+python -m emg2qwerty.train\
+user=single_user\
+model=bilstm_ctc \
+checkpoint=<path_to_checkpoint>\
+train=False\
+decoder=ctc_beam
 
-The 6-gram character-level language model, used by the first-pass beam-search decoder above, is generated from [WikiText-103 raw dataset](https://huggingface.co/datasets/wikitext), and built using [KenLM](https://github.com/kpu/kenlm). The LM is available under `models/lm/`, both in the binary format, and the human-readable [ARPA format](https://cmusphinx.github.io/wiki/arpaformat/). These can be regenerated as follows:
 
-1. Build kenlm from source: <https://github.com/kpu/kenlm#compiling>
-2. Run `./scripts/lm/build_char_lm.sh <ngram_order>`
+The beam search decoder uses a **6-gram character-level language model**, located in:
 
-## License
 
-emg2qwerty is CC-BY-NC-4.0 licensed, as found in the LICENSE file.
+models/lm/
 
-## Citing emg2qwerty
 
-```
-@misc{sivakumar2024emg2qwertylargedatasetbaselines,
-      title={emg2qwerty: A Large Dataset with Baselines for Touch Typing using Surface Electromyography},
-      author={Viswanath Sivakumar and Jeffrey Seely and Alan Du and Sean R Bittner and Adam Berenzweig and Anuoluwapo Bolarinwa and Alexandre Gramfort and Michael I Mandel},
-      year={2024},
-      eprint={2410.20081},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2410.20081},
-}
-```
+---
+
+# 5. Final Model
+
+Final configuration used in our report:
+
+Model architecture:
+
+BiLSTM
+
+Data processing techniques:
+
+- weakened SpecAugment  
+- Gaussian noise  
+- temporal attenuation  
+
+Temporal downsampling factor:
+
+
+2
+
+
+Final performance:
+
+| Metric | Value |
+|------|------|
+| Validation CER | 9.24% |
+| Test CER | **7.74%** |
+
+---
+
+# 6. References
+
+Viswanath Sivakumar et al.  
+*emg2qwerty: A Large Dataset with Baselines for Touch Typing using Surface Electromyography*  
+NeurIPS 2024.
+
+Dataset and original repository:  
+https://github.com/facebookresearch/emg2qwerty

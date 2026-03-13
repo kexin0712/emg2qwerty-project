@@ -70,3 +70,4 @@ class BiLSTMCTCModule(CTCModelBase, pl.LightningModule):
         x = self.encoder_norm(x)
         x = self.output_dropout(x)
         return self.classifier(x)
+    

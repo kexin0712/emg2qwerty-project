@@ -10,6 +10,7 @@ from typing import Any, TypeVar
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import torchaudio
 
 
@@ -243,6 +244,44 @@ class SpecAugment:
 
         # (..., C, freq, T) -> (T, ..., C, freq)
         return x.movedim(-1, 0)
+
+@dataclass
+class SelectEMGChannels:
+    """Select a fixed number of electrode channels per band.
+
+    Expects tensor shaped (T, bands, channels) after ToTensor.
+    """
+
+    channels: int
+    channel_dim: int = -1
+
+    def __post_init__(self) -> None:
+        assert self.channels > 0
+
+    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        if tensor.size(self.channel_dim) < self.channels:
+            raise ValueError(
+                f"Requested channels={self.channels}, but tensor only has "
+                f"{tensor.size(self.channel_dim)} channels."
+            )
+        return tensor.narrow(self.channel_dim, 0, self.channels)
+
+
+@dataclass
+class TemporalDownsample:
+    """Downsample the temporal dimension by integer factor."""
+
+    factor: int = 1
+    time_dim: int = 0
+
+    def __post_init__(self) -> None:
+        assert self.factor >= 1
+
+    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        if self.factor == 1:
+            return tensor
+        return tensor[:: self.factor]
+
 
 @dataclass
 class MagnitudeWarping:
