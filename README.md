@@ -68,7 +68,7 @@ ln -s ~/emg2qwerty-data-2021-08 ./data
 
 # 3. Training
 
-All training commands are executed through the `emg2qwerty.train` module.
+All training commands are executed through the `emg2qwerty.train` module. Use the corresponding command below for each model.
 
 ## Baseline (TDSConv)
 ```shell
@@ -138,58 +138,53 @@ python -m emg2qwerty.train\
 
 # 4. BiLSTM model Training with different Data Processing Techniques 
 
-Add the following commands after the command used for the Best Model (Fine-Tuned BiLSTM) to apply the corresbonding data processing technique.
+Add the following commands after the command used for the Best Model (Fine-Tuned BiLSTM) to apply the corresbonding data processing technique. If these commands cannot be executed on your machine, you can alternatively modify the configuration in config/transforms/log_spectrogram.yaml.
 
 ---
 ## Weakened SpecAugment + Gaussian Noise 
 ```shell
-    transforms.specaug.n_time_masks=2 \
-    transforms.specaug.time_mask_param=15 \
-    transforms.specaug.n_freq_masks=1 \
-    transforms.specaug.freq_mask_param=3 \
-    transforms.train.1='${gaussian_noise}'
+    specaug.n_time_masks=2 \
+    specaug.time_mask_param=15 \
+    specaug.n_freq_masks=1 \
+    specaug.freq_mask_param=3 \
+    'transforms.train=[${to_tensor},${gaussian_noise},${select_channels},${band_rotation},${temporal_jitter},${downsample},${logspec},${specaug}]'
 ```
 
 ---
 ## Magnitude Warping 
 ```shell
-    transforms.train.4='${magnitude_warp}'
+    'transforms.train=[${to_tensor}, ${select_channels}, ${band_rotation}, ${temporal_jitter}, ${magnitude_warp}, ${downsample}, ${logspec}, ${specaug}]'
 ```
 
 ---
 ## Temporal Attenuation
 ```shell
-    transforms.train.1='${temporal_attenuation}'
+    'transforms.train=[${to_tensor}, ${temporal_attenuation}, ${select_channels}, ${band_rotation}, ${temporal_jitter}, ${downsample}, ${logspec}, ${specaug}]'
 ```
 ---
 
----
 ## Weakened SpecAugment + Gaussian Noise + Magnitude Warping
 ```shell
-    transforms.specaug.n_time_masks=2 \
-    transforms.specaug.time_mask_param=15 \
-    transforms.specaug.n_freq_masks=1 \
-    transforms.specaug.freq_mask_param=3 \
-    transforms.train="[${to_tensor},${gaussian_noise},${select_channels},${band_rotation},${temporal_jitter},${magnitude_warping},${downsample},${logspec},${specaug}]"
+    specaug.n_time_masks=2 \
+    specaug.time_mask_param=15 \
+    specaug.n_freq_masks=1 \
+    specaug.freq_mask_param=3 \
+    'transforms.train=[${to_tensor},${gaussian_noise},${select_channels},${band_rotation},${temporal_jitter},${magnitude_warping},${downsample},${logspec},${specaug}]'
 ```
----
-
 ---
 ## Weakened SpecAugment + Gaussian Noise + Temporal Attenuation
 ```shell
-    transforms.specaug.n_time_masks=2 \
-    transforms.specaug.time_mask_param=15 \
-    transforms.specaug.n_freq_masks=1 \
-    transforms.specaug.freq_mask_param=3 \
-    transforms.train="[${to_tensor},${temporal_attenuation},${gaussian_noise},${select_channels},${band_rotation},${temporal_jitter},${downsample},${logspec},${specaug}]"
+    specaug.n_time_masks=2 \
+    specaug.time_mask_param=15 \
+    specaug.n_freq_masks=1 \
+    specaug.freq_mask_param=3 \
+    'transforms.train=[${to_tensor},${temporal_attenuation},${gaussian_noise},${select_channels},${band_rotation},${temporal_jitter},${downsample},${logspec},${specaug}]'
 ```
----
-
 ---
 ## Ablation Experiments on Sampling Rate
 
 Modify the downsampling factor to control the sampling rate:
-Example values: 1, 2, 3，4, 6.
+Example values: 1, 2, 3, 4, 6.
 
 ```shell
     transforms.downsample.factor = <factor>
@@ -204,43 +199,41 @@ After training, models can be evaluated using greedy decoding or beam search dec
 
 ## Greedy Decoding
 
-
+```shell
 python -m emg2qwerty.train\
 user=single_user\
 model=bilstm_ctc \
 checkpoint=<path_to_checkpoint>\
 train=False\
 decoder=ctc_greedy
-
+```
 
 ---
 
 ## Beam Search Decoding
 
-
+```shell
 python -m emg2qwerty.train\
 user=single_user\
 model=bilstm_ctc \
 checkpoint=<path_to_checkpoint>\
 train=False\
 decoder=ctc_beam
+```
 
+The 6-gram character-level language model, used by the first-pass beam-search decoder above, is generated from [WikiText-103 raw dataset](https://huggingface.co/datasets/wikitext), and built using [KenLM](https://github.com/kpu/kenlm). The LM is available under `models/lm/`, both in the binary format, and the human-readable [ARPA format](https://cmusphinx.github.io/wiki/arpaformat/). These can be regenerated as follows:
 
-The beam search decoder uses a **6-gram character-level language model**, located in:
-
-
-models/lm/
+1. Build kenlm from source: <https://github.com/kpu/kenlm#compiling>
+2. Run `./scripts/lm/build_char_lm.sh <ngram_order>`
 
 
 ---
 
-# 5. Final Model
+# 6. Final Model
 
 Final configuration used in our report:
 
-Model architecture:
-
-BiLSTM
+Model architecture: BiLSTM
 
 Data processing techniques:
 
@@ -248,11 +241,9 @@ Data processing techniques:
 - Gaussian noise  
 - temporal attenuation  
 
-Temporal downsampling factor:
+Temporal downsampling factor: 2
 
-
-2
-
+Decoding strategy: Beam Search
 
 Final performance:
 
@@ -263,7 +254,10 @@ Final performance:
 
 ---
 
-# 6. References
+# 7. License
+emg2qwerty is CC-BY-NC-4.0 licensed, as found in the LICENSE file.
+
+# 8. References
 
 Viswanath Sivakumar et al.  
 *emg2qwerty: A Large Dataset with Baselines for Touch Typing using Surface Electromyography*  
